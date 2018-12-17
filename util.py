@@ -1,10 +1,11 @@
 """
-Helper functions from https://github.com/hardmaru/pytorch_notebooks/blob/master/mixture_density_networks.ipynb
+Helper function from 
+https://github.com/hardmaru/pytorch_notebooks/blob/master/mixture_density_networks.ipynb
 
 
 MIT License
 
-Copyright (c) 2017 
+Copyright (c) 2017
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -32,8 +33,6 @@ from torch.autograd import Variable
 """
 Generate data
 """
-torch.manual_seed(123)
-np.random.seed(4530)
 
 
 def generate_data(n_samples):
@@ -48,8 +47,3 @@ def generate_data(n_samples):
     y_variable = Variable(y_tensor, requires_grad=False)
 
     return x_data, x_variable, y_data, y_variable
-
-
-def gumbel_sample(x, axis=1):
-    z = np.random.gumbel(loc=0, scale=1, size=x.shape)
-    return (np.log(x) + z).argmax(axis=axis)

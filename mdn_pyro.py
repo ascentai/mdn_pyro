@@ -10,7 +10,7 @@ from pyro import poutine
 from pyro.infer import SVI
 from pyro.infer import TraceEnum_ELBO, config_enumerate
 from pyro.optim import Adam
-from util import generate_data, gumbel_sample
+from util import generate_data
 
 """
 This scripts implements a simple Mixture Density network in Pyro. It
@@ -19,6 +19,8 @@ Pattern Recognition and Machine Learning.) and is based on the pytorch
 implementation of David Ha,
 https://github.com/hardmaru/pytorch_notebooks/blob/master/mixture_density_networks.ipynb
 """
+torch.manual_seed(123)
+np.random.seed(4530)
 
 n_samples = 1000
 n_gaussians = 5
@@ -62,22 +64,26 @@ class MDN(nn.Module):
         muT = torch.transpose(mu, 0, 1)
         sigmaT = torch.transpose(sigma, 0, 1)
 
+        n_samples = y.shape[0]
         assert muT.shape == (n_gaussians, n_samples)
         assert sigmaT.shape == (n_gaussians, n_samples)
         with pyro.plate("samples", n_samples):
-            assignment = pyro.sample("assignment", dist.Categorical(pi))
+            assign = pyro.sample("assign", dist.Categorical(pi))
             # We need this case distinction for the two different
             # cases of assignment: sampling a random assignment and
             # enumerating over mixtures. See
             # http://pyro.ai/examples/enumeration.html for a tutorial.
-            if len(assignment.shape) == 1:
-                pyro.sample('obs', dist.Normal(torch.gather(muT, 0, assignment.view(1, -1))[0],
-                                               torch.gather(sigmaT, 0, assignment.view(1, -1))[0]),
-                            obs=x)
+            if len(assign.shape) == 1:
+                sample = pyro.sample('obs', dist.Normal(torch.gather(muT, 0,
+                                                                     assign.view(1, -1))[0],
+                                                        torch.gather(sigmaT, 0,
+                                                                     assign.view(1, -1))[0]),
+                                     obs=x)
             else:
-                pyro.sample('obs', dist.Normal(muT[assignment][:, 0],
-                                               sigmaT[assignment][:, 0]),
-                            obs=x)
+                sample = pyro.sample('obs', dist.Normal(muT[assign][:, 0],
+                                                        sigmaT[assign][:, 0]),
+                                     obs=x)
+        return sample
 
 
 # Create network instance
@@ -88,7 +94,7 @@ adam_params = {"lr": 0.001, "betas": (0.9, 0.999)}
 optimizer = Adam(adam_params)
 
 # Use the AutoDelta guide for MAP estimation of the network parameters
-guide = AutoDelta(poutine.block(network.model, hide=['assignment', 'obs']))
+guide = AutoDelta(poutine.block(network.model, hide=['assign', 'obs']))
 # Initialize ELBO loss with enumeration over the discrete mixtures of the GMM model
 elbo = TraceEnum_ELBO(max_plate_nesting=1)
 elbo.loss(network.model, guide, x_variable, y_variable)
@@ -117,24 +123,16 @@ losses = train_mdn()
 Sample from trained model.
 """
 # evenly spaced samples from -10 to 10
-x_test_data = np.linspace(-15, 15, n_samples)
+y_test_data = np.linspace(-15, 15, n_samples)
 # change data shape, move from numpy to torch
-x_test_tensor = torch.from_numpy(np.float32(x_test_data).reshape(n_samples, 1))
+y_test_tensor = torch.from_numpy(np.float32(y_test_data))
 
-
-assignment, sigma, mu = network(x_test_tensor)
-assignment_data = assignment.data.numpy()
-sigma_data = sigma.data.numpy()
-mu_data = mu.data.numpy()
-
-k = gumbel_sample(assignment_data)
-indices = (np.arange(n_samples), k)
-rn = np.random.randn(n_samples)
-sampled = rn * sigma_data[indices] + mu_data[indices]
-
+model_sampled = network.model(None, y_test_tensor)
 
 pl.figure(figsize=(8, 8))
 pl.scatter(y_data, x_data, alpha=0.2, label='Data')
-pl.scatter(x_test_data, sampled, alpha=0.2, color='red', label='Samples')
+pl.scatter(y_test_data,
+           model_sampled.detach().numpy(), alpha=0.2, color='red',
+           label='Model samples')
 pl.legend()
 pl.show()
