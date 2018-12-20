@@ -129,10 +129,12 @@ y_test_tensor = torch.from_numpy(np.float32(y_test_data))
 
 model_sampled = network.model(None, y_test_tensor)
 
-pl.figure(figsize=(8, 8))
+pl.figure(figsize=(8, 6))
 pl.scatter(y_data, x_data, alpha=0.2, label='Data')
 pl.scatter(y_test_data,
            model_sampled.detach().numpy(), alpha=0.2, color='red',
            label='Model samples')
+pl.xlabel('y')
+pl.ylabel('x')
 pl.legend()
 pl.show()
